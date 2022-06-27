@@ -36,7 +36,7 @@ extras_require = {
         "mypy==0.961",
         "types-requests==2.28.0",
         "code-wake-sql14-store==0.0.4",
-        "code-wake-v1rest-store==0.0.1",
+        "code-wake-v1rest-store==0.0.2",
         "flask==2.1.2",
     ],
 }
