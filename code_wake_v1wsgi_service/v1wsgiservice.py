@@ -259,6 +259,8 @@ class V1WsgiMiddleware:
         )
 
     def insert_event(self, request):
+        params = urllib.parse.parse_qsl(request.query_string.decode())
+        sync = ("sync", "true") in params
         json = self._json_decoder.decode(request.data.decode())
 
         process = self._store.get_process_by_id(json["process_id"])
@@ -271,27 +273,31 @@ class V1WsgiMiddleware:
             json["data"],
             inc_st=json["stacktrace"] is not None,
             st_data=json["stacktrace"],
+            sync=sync,
         )
 
-        return werkzeug.wrappers.Response(
-            self._json_encoder.encode(
-                {
-                    "id": event.id,
-                    "when_ts": event.when_ts,
-                    "process_id": process.id,
-                    "digest": None if event.digest is None else binascii.b2a_hex(event.digest).decode(),
-                    "stacktrace": None
-                    if event.stacktrace is None
-                    else {
-                        "id": event.stacktrace.id,
-                        "digest": binascii.b2a_hex(event.stacktrace.digest).decode(),
-                        "stackframes": [[sf.filename, sf.lineno, sf.src] for sf in event.stacktrace.stackframes],
-                    },
-                }
-            ),
-            mimetype="application/json",
-            status=201,
-        )
+        if sync:
+            return werkzeug.wrappers.Response(
+                self._json_encoder.encode(
+                    {
+                        "id": event.id,
+                        "when_ts": event.when_ts,
+                        "process_id": process.id,
+                        "digest": None if event.digest is None else binascii.b2a_hex(event.digest).decode(),
+                        "stacktrace": None
+                        if event.stacktrace is None
+                        else {
+                            "id": event.stacktrace.id,
+                            "digest": binascii.b2a_hex(event.stacktrace.digest).decode(),
+                            "stackframes": [[sf.filename, sf.lineno, sf.src] for sf in event.stacktrace.stackframes],
+                        },
+                    }
+                ),
+                mimetype="application/json",
+                status=201,
+            )
+        else:
+            return werkzeug.wrappers.Response("", status=202)
 
     def get_events_by_data(self, request):
         params = urllib.parse.parse_qsl(request.query_string.decode())
