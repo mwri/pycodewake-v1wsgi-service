@@ -285,6 +285,7 @@ class V1WsgiMiddleware:
                     else {
                         "id": event.stacktrace.id,
                         "digest": binascii.b2a_hex(event.stacktrace.digest).decode(),
+                        "stackframes": [[sf.filename, sf.lineno, sf.src] for sf in event.stacktrace.stackframes],
                     },
                 }
             ),
@@ -312,6 +313,7 @@ class V1WsgiMiddleware:
                         else {
                             "id": event.stacktrace.id,
                             "digest": binascii.b2a_hex(event.stacktrace.digest).decode(),
+                            "stackframes": [[sf.filename, sf.lineno, sf.src] for sf in event.stacktrace.stackframes],
                         },
                     }
                     for event in events
