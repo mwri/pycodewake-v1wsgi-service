@@ -42,3 +42,8 @@ def store_cls():
             return self._flask_app.test_client
 
     return TestV1RestStore
+
+
+@pytest.fixture
+def store_cleanup():
+    return lambda store: None
