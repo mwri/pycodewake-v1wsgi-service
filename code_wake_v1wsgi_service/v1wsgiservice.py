@@ -277,6 +277,7 @@ class V1WsgiMiddleware:
             json["data"],
             inc_st=json["stacktrace"] is not None,
             st_data=json["stacktrace"],
+            when_ts=json["when_ts"],
             sync=sync,
         )
 
