@@ -9,8 +9,8 @@ import werkzeug
 
 
 class V1WsgiMiddleware:
-    def __init__(self, app, path: str, store):
-        self.app = app
+    def __init__(self, next_app, path: str, store):
+        self._next_app = next_app
         self._path = path
         self._store = store
         self._json_encoder = json.JSONEncoder()
@@ -19,28 +19,32 @@ class V1WsgiMiddleware:
     def __call__(self, environ, start_response):
         request = werkzeug.wrappers.Request(environ)
 
-        if not request.path.startswith(self._path):
-            return self.app(environ, start_response)(environ, start_response)
+        if request.path.startswith(self._path):
+            path_postfix = request.path[len(self._path) :]
 
+            if path_postfix == "" or path_postfix[0] == "/":
+                return self._service_request(request, path_postfix)(environ, start_response)
+
+        return self._next_app(environ, start_response)
+
+    def _service_request(self, request, path_postfix):
         if request.method == "POST":
             if "content-type" not in request.headers or "application/json" not in request.headers["content-type"]:
                 return self.error_response(
                     400,
                     "application/json content type only supported",
-                )(environ, start_response)
-
-        path_postfix = request.path[len(self._path) :]
+                )
 
         if path_postfix.startswith("/environments/"):
             path_postfix = path_postfix[len("/environments") :]
 
             if request.method == "GET" and len(path_postfix) > 1 and path_postfix[0] == "/":
-                return self.get_environment_by_id(request, path_postfix[1:])(environ, start_response)
+                return self.get_environment_by_id(request, path_postfix[1:])
             else:
                 return self.error_response(
                     405,
                     "method not allowed",
-                )(environ, start_response)
+                )
 
         elif path_postfix.startswith("/apps"):
             path_postfix = path_postfix[len("/apps") :]
@@ -49,31 +53,31 @@ class V1WsgiMiddleware:
                 if request.method == "POST":
                     return self.insert_app(
                         request,
-                    )(environ, start_response)
+                    )
                 else:
                     return self.error_response(
                         405,
                         "method not allowed",
-                    )(environ, start_response)
+                    )
             elif len(path_postfix) > 1 and path_postfix[0] == "/":
                 if request.method == "GET":
-                    return self.get_app_by_id(request, path_postfix[1:])(environ, start_response)
+                    return self.get_app_by_id(request, path_postfix[1:])
                 else:
                     return self.error_response(
                         405,
                         "method not allowed",
-                    )(environ, start_response)
+                    )
 
         elif path_postfix.startswith("/app_vsns"):
             path_postfix = path_postfix[len("/app_vsns") :]
 
             if request.method == "GET" and len(path_postfix) > 1 and path_postfix[0] == "/":
-                return self.get_app_vsn_by_id(request, path_postfix[1:])(environ, start_response)
+                return self.get_app_vsn_by_id(request, path_postfix[1:])
             else:
                 return self.error_response(
                     405,
                     "method not allowed",
-                )(environ, start_response)
+                )
 
         elif path_postfix.startswith("/processes"):
             path_postfix = path_postfix[len("/processes") :]
@@ -82,23 +86,23 @@ class V1WsgiMiddleware:
                 if request.method == "POST":
                     return self.insert_process(
                         request,
-                    )(environ, start_response)
+                    )
                 else:
                     return self.error_response(
                         405,
                         "method not allowed",
-                    )(environ, start_response)
+                    )
             elif len(path_postfix) > 1 and path_postfix[0] == "/":
                 if request.method == "GET":
                     return self.get_process_by_id(
                         request,
                         path_postfix[1:],
-                    )(environ, start_response)
+                    )
                 else:
                     return self.error_response(
                         405,
                         "method not allowed",
-                    )(environ, start_response)
+                    )
 
         elif path_postfix.startswith("/events"):
             path_postfix = path_postfix[len("/events") :]
@@ -107,18 +111,18 @@ class V1WsgiMiddleware:
                 if request.method == "POST":
                     return self.insert_event(
                         request,
-                    )(environ, start_response)
+                    )
                 elif request.method == "GET":
                     return self.get_events_by_data(
                         request,
-                    )(environ, start_response)
+                    )
                 else:
                     return self.error_response(
                         405,
                         "method not allowed",
-                    )(environ, start_response)
+                    )
 
-        return self.error_response(404, "not found")(environ, start_response)
+        return self.error_response(404, "not found")
 
     def error_response(self, status_code, msg):
         return werkzeug.wrappers.Response(
@@ -259,6 +263,8 @@ class V1WsgiMiddleware:
         )
 
     def insert_event(self, request):
+        params = urllib.parse.parse_qsl(request.query_string.decode())
+        sync = ("sync", "true") in params
         json = self._json_decoder.decode(request.data.decode())
 
         process = self._store.get_process_by_id(json["process_id"])
@@ -271,26 +277,32 @@ class V1WsgiMiddleware:
             json["data"],
             inc_st=json["stacktrace"] is not None,
             st_data=json["stacktrace"],
+            when_ts=json["when_ts"],
+            sync=sync,
         )
 
-        return werkzeug.wrappers.Response(
-            self._json_encoder.encode(
-                {
-                    "id": event.id,
-                    "when_ts": event.when_ts,
-                    "process_id": process.id,
-                    "digest": None if event.digest is None else binascii.b2a_hex(event.digest).decode(),
-                    "stacktrace": None
-                    if event.stacktrace is None
-                    else {
-                        "id": event.stacktrace.id,
-                        "digest": binascii.b2a_hex(event.stacktrace.digest).decode(),
-                    },
-                }
-            ),
-            mimetype="application/json",
-            status=201,
-        )
+        if sync:
+            return werkzeug.wrappers.Response(
+                self._json_encoder.encode(
+                    {
+                        "id": event.id,
+                        "when_ts": event.when_ts,
+                        "process_id": process.id,
+                        "digest": None if event.digest is None else binascii.b2a_hex(event.digest).decode(),
+                        "stacktrace": None
+                        if event.stacktrace is None
+                        else {
+                            "id": event.stacktrace.id,
+                            "digest": binascii.b2a_hex(event.stacktrace.digest).decode(),
+                            "stackframes": [[sf.filename, sf.lineno, sf.src] for sf in event.stacktrace.stackframes],
+                        },
+                    }
+                ),
+                mimetype="application/json",
+                status=201,
+            )
+        else:
+            return werkzeug.wrappers.Response("", status=202)
 
     def get_events_by_data(self, request):
         params = urllib.parse.parse_qsl(request.query_string.decode())
@@ -312,6 +324,7 @@ class V1WsgiMiddleware:
                         else {
                             "id": event.stacktrace.id,
                             "digest": binascii.b2a_hex(event.stacktrace.digest).decode(),
+                            "stackframes": [[sf.filename, sf.lineno, sf.src] for sf in event.stacktrace.stackframes],
                         },
                     }
                     for event in events
