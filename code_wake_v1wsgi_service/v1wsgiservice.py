@@ -87,6 +87,10 @@ class V1WsgiMiddleware:
                     return self.insert_process(
                         request,
                     )
+                elif request.method == "GET":
+                    return self.get_processes(
+                        request,
+                    )
                 else:
                     return self.error_response(
                         405,
@@ -305,10 +309,11 @@ class V1WsgiMiddleware:
             return werkzeug.wrappers.Response("", status=202)
 
     def get_events_by_data(self, request):
-        params = urllib.parse.parse_qsl(request.query_string.decode())
-        where = [tuple(clause.split("=", 1)) for clause in dict(params)["where"].split(",")]
+        params = dict(urllib.parse.parse_qsl(request.query_string.decode()))
+        where = [tuple(clause.split("=", 1)) for clause in params["where"].split(",")]
+        process_id = params["process_id"] if "process_id" in params else None
 
-        events = self._store.get_events_by_data(where)
+        events = self._store.get_events_by_data(where, process_id=process_id)
 
         return werkzeug.wrappers.Response(
             self._json_encoder.encode(
@@ -332,6 +337,35 @@ class V1WsgiMiddleware:
             ),
             mimetype="application/json",
             status=201,
+        )
+
+    def get_processes(self, request):
+        params = dict(urllib.parse.parse_qsl(request.query_string.decode()))
+        app_id = params.get("app_id")
+        from_ts = params.get("from_ts")
+        to_ts = params.get("to_ts")
+
+        processes = self._store.get_processes(app_id=app_id, from_ts=from_ts, to_ts=to_ts)
+
+        return werkzeug.wrappers.Response(
+            self._json_encoder.encode(
+                [
+                    {
+                        "id": process.id,
+                        "run_ts": process.run_ts,
+                        "environment_id": process.environment_id,
+                        "app_id": process.app_id,
+                        "app_vsn_id": process.app_vsn_id,
+                        "pid": process.pid,
+                        "username": process.username,
+                        "fqdn": process.fqdn,
+                        "exe_path": process.exe_path,
+                    }
+                    for process in processes
+                ]
+            ),
+            mimetype="application/json",
+            status=200,
         )
 
     class Base:
