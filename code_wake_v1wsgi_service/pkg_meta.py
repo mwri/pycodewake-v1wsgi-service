@@ -4,7 +4,7 @@ import sys
 from typing import Any, Dict
 
 name = "code-wake-v1wsgi-service"
-version = "0.1.1"
+version = "0.2.0"
 author = "Michael Wright"
 author_email = "mjw@methodanalysis.com"
 description = "Code Wake V1 WSGI Werkzeug middleware"
