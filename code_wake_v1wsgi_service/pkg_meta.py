@@ -23,7 +23,7 @@ entry_points: Dict[str, Any] = {
 python_requires = ">=3.6"
 install_requires = [
     "bencode.py~=4.0.0",
-    "code-wake~=0.1.0",
+    "code-wake~=0.2.0",
     "werkzeug~=2.1.2",
 ]
 
@@ -35,8 +35,8 @@ extras_require = {
         "isort==5.10.1",
         "mypy==0.961",
         "types-requests==2.28.0",
-        "code-wake-sql14-store==0.1.0",
-        "code-wake-v1rest-store==0.1.0",
+        "code-wake-sql14-store==0.3.0",
+        "code-wake-v1rest-store==0.2.0",
         "flask==2.1.2",
     ],
 }
